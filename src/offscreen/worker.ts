@@ -77,8 +77,8 @@ async function loadModel() {
     // ── Choose dtype + device ──
     // q4f16 causes "createBuffer size out of range" on some GPUs.
     // fp16 is safest for WebGPU; fall back to wasm + q4 if no WebGPU/fp16.
-    let dtype: any = "fp16";
-    let device: any = "webgpu";
+    let dtype: any = "q4";
+    let device: any = "wasm";
 
     try {
       const adapter = await (navigator as any).gpu?.requestAdapter();

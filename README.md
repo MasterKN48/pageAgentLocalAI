@@ -42,6 +42,13 @@ A privacy-focused, high-performance Chrome extension that brings local AI capabi
    - Enable "Developer mode"
    - Click "Load unpacked" and select the `dist` directory.
 
+### 📥 Direct Download (Pre-built)
+
+Alternatively, you can download the pre-built extension:
+1. Download [`extension.zip`](extension.zip) from this repository.
+2. Unzip the archive.
+3. Load the resulting `dist` folder in `chrome://extensions/` as an unpacked extension.
+
 ## 📖 Usage
 
 - **Side Panel**: Open the side panel to chat with the local model.
