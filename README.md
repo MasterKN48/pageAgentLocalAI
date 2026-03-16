@@ -1,5 +1,7 @@
 # Page Agent - Local AI Chrome Extension
 
+![Extension Screenshot](public/screenshot.png)
+
 A privacy-focused, high-performance Chrome extension that brings local AI capabilities directly to your browser. Powered by **Transformers.js** and **FunctionGemma**, this extension runs large language models entirely on your machine using **WebGPU**, ensuring your data never leaves your device.
 
 ## 🚀 Features
