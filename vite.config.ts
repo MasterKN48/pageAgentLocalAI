@@ -40,7 +40,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         'background/index': resolve(__dirname, 'src/background/index.ts'),
-        'content/index': resolve(__dirname, 'src/content/index.ts'),
         'offscreen/worker': resolve(__dirname, 'src/offscreen/worker.ts'),
         'sidepanel/main': resolve(__dirname, 'src/sidepanel/main.ts'),
       },

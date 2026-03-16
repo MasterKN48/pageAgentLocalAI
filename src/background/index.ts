@@ -13,9 +13,10 @@ async function ensureOffscreen(): Promise<void> {
   }
 
   await chrome.offscreen.createDocument({
-    url: 'offscreen/offscreen.html',
+    url: "offscreen/offscreen.html",
     reasons: [chrome.offscreen.Reason.WORKERS],
-    justification: 'Running SmolLM2-135M LLM via Transformers.js with WebGPU',
+    justification:
+      "Running functiongemma-270m-it-ONNX LLM via Transformers.js with WebGPU",
   });
 
   offscreenCreated = true;
@@ -33,51 +34,87 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 
 // Handle messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'LOAD_MODEL') {
-    ensureOffscreen().then(() => {
-      chrome.runtime.sendMessage(message, sendResponse);
-    }).catch((err) => {
-      sendResponse({ success: false, error: err.message });
-    });
-    return true;
-  }
-
-  if (message.type === 'CHAT_COMPLETION') {
-    ensureOffscreen().then(() => {
-      chrome.runtime.sendMessage(message, sendResponse);
-    }).catch((err) => {
-      sendResponse({ success: false, error: err.message });
-    });
-    return true;
-  }
-
-  if (message.type === 'GET_MODEL_STATUS') {
-    ensureOffscreen().then(() => {
-      chrome.runtime.sendMessage(message, sendResponse);
-    }).catch((err) => {
-      sendResponse({
-        loaded: false,
-        loading: false,
-        progress: 0,
-        error: err.message,
-        message: err.message,
+  if (message.type === "LOAD_MODEL") {
+    ensureOffscreen()
+      .then(() => {
+        chrome.runtime.sendMessage(message, sendResponse);
+      })
+      .catch((err) => {
+        sendResponse({ success: false, error: err.message });
       });
-    });
     return true;
   }
 
-  if (message.type === 'INJECT_AGENT') {
+  if (message.type === "CHAT_COMPLETION") {
+    ensureOffscreen()
+      .then(() => {
+        chrome.runtime.sendMessage(message, sendResponse);
+      })
+      .catch((err) => {
+        sendResponse({ success: false, error: err.message });
+      });
+    return true;
+  }
+
+  if (message.type === "GET_MODEL_STATUS") {
+    ensureOffscreen()
+      .then(() => {
+        chrome.runtime.sendMessage(message, sendResponse);
+      })
+      .catch((err) => {
+        sendResponse({
+          loaded: false,
+          loading: false,
+          progress: 0,
+          error: err.message,
+          message: err.message,
+        });
+      });
+    return true;
+  }
+
+  if (message.type === "INJECT_AGENT") {
     const tabId = message.tabId || sender.tab?.id;
     if (tabId) {
-      chrome.tabs.sendMessage(tabId, { type: 'ACTIVATE_AGENT' }, sendResponse);
+      // First, try to send the message
+      chrome.tabs.sendMessage(tabId, { type: "ACTIVATE_AGENT" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.log("[Background] Content script not found, injecting...");
+          // If sending fails, the script might not be injected. Try manual injection.
+          chrome.scripting
+            .executeScript({
+              target: { tabId },
+              files: ["content/index.js"],
+            })
+            .then(() => {
+              // After injection, wait a bit and try sending the message again
+              setTimeout(() => {
+                chrome.tabs.sendMessage(
+                  tabId,
+                  { type: "ACTIVATE_AGENT" },
+                  sendResponse,
+                );
+              }, 100);
+            })
+            .catch((err) => {
+              console.error("[Background] Injection failed:", err);
+              sendResponse({
+                success: false,
+                error: `Injection failed: ${err.message}`,
+              });
+            });
+        } else {
+          sendResponse(response);
+        }
+      });
     } else {
-      sendResponse({ success: false, error: 'No tab ID' });
+      sendResponse({ success: false, error: "No tab ID" });
     }
     return true;
   }
 
   // Forward model status updates to all listeners (side panel)
-  if (message.type === 'MODEL_STATUS_UPDATE') {
+  if (message.type === "MODEL_STATUS_UPDATE") {
     // Broadcast to all extension pages — ignore errors from no listeners
     chrome.runtime.sendMessage(message).catch(() => {});
   }

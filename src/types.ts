@@ -6,16 +6,16 @@ export interface Message {
 
 // Messages from content script / sidepanel to background
 export type ExtMessage =
-  | { type: 'CHAT_COMPLETION'; payload: OpenAIChatRequest; requestId: string }
-  | { type: 'LOAD_MODEL'; requestId: string }
-  | { type: 'GET_MODEL_STATUS' }
-  | { type: 'INJECT_AGENT'; tabId?: number }
-  | { type: 'MODEL_STATUS_UPDATE'; payload: ModelStatus };
+  | { type: "CHAT_COMPLETION"; payload: OpenAIChatRequest; requestId: string }
+  | { type: "LOAD_MODEL"; requestId: string }
+  | { type: "GET_MODEL_STATUS" }
+  | { type: "INJECT_AGENT"; tabId?: number }
+  | { type: "MODEL_STATUS_UPDATE"; payload: ModelStatus };
 
 export interface OpenAIChatRequest {
   model: string;
   messages: Array<{
-    role: 'system' | 'user' | 'assistant' | 'tool';
+    role: "system" | "user" | "assistant" | "tool" | "developer";
     content: string | null;
     tool_calls?: ToolCall[];
     tool_call_id?: string;
@@ -29,7 +29,7 @@ export interface OpenAIChatRequest {
 
 export interface ToolCall {
   id: string;
-  type: 'function';
+  type: "function";
   function: {
     name: string;
     arguments: string;
@@ -37,7 +37,7 @@ export interface ToolCall {
 }
 
 export interface OpenAITool {
-  type: 'function';
+  type: "function";
   function: {
     name: string;
     description: string;

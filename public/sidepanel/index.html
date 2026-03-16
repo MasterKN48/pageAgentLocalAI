@@ -1,51 +1,66 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Page Agent</title>
-  <link rel="stylesheet" href="./style.css">
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1>Page Agent</h1>
-      <p class="subtitle">Local AI-powered page automation</p>
-    </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page Agent</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Page Agent</h1>
+        <p class="subtitle">Local AI-powered page automation</p>
+      </header>
 
-    <section class="model-section">
-      <h2>Model Status</h2>
-      <div id="model-status" class="status-card">
-        <div class="status-indicator" id="status-dot"></div>
-        <span id="status-text">Not loaded</span>
-      </div>
-      <div class="progress-container" id="progress-container" style="display: none;">
-        <div class="progress-bar">
-          <div class="progress-fill" id="progress-fill"></div>
+      <section class="model-section">
+        <h2>Model Status</h2>
+        <div id="model-status" class="status-card">
+          <div class="status-indicator" id="status-dot"></div>
+          <span id="status-text">Not loaded</span>
         </div>
-        <span class="progress-text" id="progress-text">0%</span>
-      </div>
-      <button id="load-btn" class="btn primary">Load Model</button>
-      <p class="hint">Loads SmolLM2-135M-Instruct (Q4) locally via WebGPU.<br>First load downloads ~100MB, cached after.</p>
-    </section>
+        <div
+          class="progress-container"
+          id="progress-container"
+          style="display: none"
+        >
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <span class="progress-text" id="progress-text">0%</span>
+        </div>
+        <button id="load-btn" class="btn primary">Load Model</button>
+        <p class="hint">
+          Loads functiongemma-270m-it-ONNX (Q4) locally via WebGPU.<br />First
+          load downloads ~100MB, cached after.
+        </p>
+      </section>
 
-    <section class="agent-section">
-      <h2>Page Agent</h2>
-      <button id="inject-btn" class="btn secondary" disabled>Activate on Current Page</button>
-      <p class="hint">Injects the AI agent into the active tab. Give it natural language commands to interact with the page.</p>
-    </section>
+      <section class="agent-section">
+        <h2>Page Agent</h2>
+        <button id="inject-btn" class="btn secondary" disabled>
+          Activate on Current Page
+        </button>
+        <p class="hint">
+          Injects the AI agent into the active tab. Give it natural language
+          commands to interact with the page.
+        </p>
+      </section>
 
-    <section class="info-section">
-      <h2>How it works</h2>
-      <ol>
-        <li>Load the model (one-time, cached after first load)</li>
-        <li>Click "Activate" on any page</li>
-        <li>Use the chat panel to give commands</li>
-        <li>The AI reads the page DOM and performs actions</li>
-      </ol>
-      <p class="hint">All processing happens locally on your device. No data is sent to any server.</p>
-    </section>
-  </div>
-  <script type="module" src="./main.js"></script>
-</body>
+      <section class="info-section">
+        <h2>How it works</h2>
+        <ol>
+          <li>Load the model (one-time, cached after first load)</li>
+          <li>Click "Activate" on any page</li>
+          <li>Use the chat panel to give commands</li>
+          <li>The AI reads the page DOM and performs actions</li>
+        </ol>
+        <p class="hint">
+          All processing happens locally on your device. No data is sent to any
+          server.
+        </p>
+      </section>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
 </html>

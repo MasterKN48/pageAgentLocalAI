@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite build --watch",
-    "build": "vite build && node scripts/postbuild.js"
+    "dev": "vite build --watch & vite build --config vite.content.config.ts --watch",
+    "build": "vite build && vite build --config vite.content.config.ts && node scripts/postbuild.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.4.0",
     "page-agent": "^1.5.7",
-    "zod": "^3.25.0"
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",

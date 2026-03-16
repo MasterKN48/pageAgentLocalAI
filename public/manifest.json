@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Page Agent - Local AI",
-  "description": "AI-powered page agent using local SmolLM2-135M model via WebGPU",
+  "description": "AI-powered page agent using local functiongemma-270m-it-ONNX model via WebGPU",
   "version": "1.0.0",
   "permissions": [
     "activeTab",
@@ -27,8 +27,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content/index.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/index.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -37,8 +41,12 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["offscreen/offscreen.html"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "offscreen/offscreen.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "icons": {
