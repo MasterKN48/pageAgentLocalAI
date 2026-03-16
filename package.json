@@ -1,0 +1,20 @@
+{
+  "name": "page-agent-ext",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build && node scripts/postbuild.js"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.4.0",
+    "page-agent": "^1.5.7",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}
