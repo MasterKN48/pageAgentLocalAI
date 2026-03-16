@@ -5,6 +5,8 @@ A privacy-focused, high-performance Chrome extension that brings local AI capabi
 ## 🚀 Features
 
 - **Local-First AI**: Runs LLMs locally in the browser. No API keys required, no cloud costs, and maximum privacy.
+- **Alibaba Page Agent Integration**: Uses [Alibaba's Page Agent](https://github.com/alibaba/page-agent) as the front-end chatbot interface. The extension injects the agent into the current tab while hosting the LLM in the background.
+- **Local LLM Hosting**: Transparently provides an OpenAI-compatible API to the injected Page Agent, serving inference directly from the extension's offscreen document.
 - **WebGPU Acceleration**: Leverages modern GPU hardware for fast inference. Falls back to WASM for compatibility.
 - **Function Calling**: Native support for tool use and function calling with `FunctionGemma-270m-it-ONNX`.
 - **Side Panel Interface**: Integrated seamlessly into the Chrome side panel for quick access.
