@@ -61,7 +61,7 @@ async function activateAgent() {
 
   try {
     agentInstance = new PageAgent({
-      model: "functiongemma-270m-it-ONNX",
+      model: "LFM2-350M-ONNX",
       baseURL: "http://local-llm-proxy",
       apiKey: "local",
       language: "en-US",

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Page Agent - Local AI",
-  "description": "AI-powered page agent using local functiongemma-270m-it-ONNX model via WebGPU",
+  "description": "AI-powered page agent using local LFM2-350M-ONNX model via WebGPU",
   "version": "1.0.0",
   "permissions": [
     "activeTab",

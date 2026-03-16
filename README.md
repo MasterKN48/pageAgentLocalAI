@@ -2,7 +2,7 @@
 
 ![Extension Screenshot](public/screenshot.png)
 
-A privacy-focused, high-performance Chrome extension that brings local AI capabilities directly to your browser. Powered by **Transformers.js** and **FunctionGemma**, this extension runs large language models entirely on your machine using **WebGPU**, ensuring your data never leaves your device.
+A privacy-focused, high-performance Chrome extension that brings local AI capabilities directly to your browser. Powered by **Transformers.js** and **LFM2**, this extension runs large language models entirely on your machine using **WebGPU**, ensuring your data never leaves your device.
 
 ## 🚀 Features
 
@@ -10,7 +10,7 @@ A privacy-focused, high-performance Chrome extension that brings local AI capabi
 - **Alibaba Page Agent Integration**: Uses [Alibaba's Page Agent](https://github.com/alibaba/page-agent) as the front-end chatbot interface. The extension injects the agent into the current tab while hosting the LLM in the background.
 - **Local LLM Hosting**: Transparently provides an OpenAI-compatible API to the injected Page Agent, serving inference directly from the extension's offscreen document.
 - **WebGPU Acceleration**: Leverages modern GPU hardware for fast inference. Falls back to WASM for compatibility.
-- **Function Calling**: Native support for tool use and function calling with `FunctionGemma-270m-it-ONNX`.
+- **Function Calling**: Native support for tool use and function calling with `LFM2-350M-ONNX`.
 - **Side Panel Interface**: Integrated seamlessly into the Chrome side panel for quick access.
 - **On-Page Agent**: Injectable chat interface that can interact with the content of any webpage.
 - **OpenAI Compatible**: Implements common chat-completion structures for easy integration.
@@ -18,7 +18,7 @@ A privacy-focused, high-performance Chrome extension that brings local AI capabi
 ## 🛠️ Tech Stack
 
 - **Core**: [Transformers.js v3+](https://huggingface.co/docs/transformers.js)
-- **Model**: `onnx-community/functiongemma-270m-it-ONNX`
+- **Model**: `onnx-community/LFM2-350M-ONNX`
 - **Runtime**: Chrome Extension (Manifest V3)
 - **Language**: TypeScript
 - **Bundler**: Vite
@@ -64,7 +64,7 @@ This extension is built with privacy as a core principle. All processing happens
 ### GitHub Information
 
 **Description:**
-🚀 A private, local AI assistant for your browser. Powered by Transformers.js and FunctionGemma, running locally via WebGPU/WASM. No cloud APIs, no data tracking.
+🚀 A private, local AI assistant for your browser. Powered by Transformers.js and LFM2, running locally via WebGPU/WASM. No cloud APIs, no data tracking.
 
 **Keywords:**
-`chrome-extension`, `local-ai`, `transformers-js`, `webgpu`, `onnx`, `function-calling`, `privacy-focused`, `browser-ml`, `gemma`, `ai-agent`
+`chrome-extension`, `local-ai`, `transformers-js`, `webgpu`, `onnx`, `function-calling`, `privacy-focused`, `browser-ml`, `lfm2`, `ai-agent`

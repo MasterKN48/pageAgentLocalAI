@@ -17,7 +17,7 @@ import type {
   ToolCall,
 } from "../types";
 
-const MODEL_ID = "onnx-community/functiongemma-270m-it-ONNX";
+const MODEL_ID = "onnx-community/LFM2-350M-ONNX";
 
 let tokenizer: any = null;
 let model: any = null;
@@ -105,7 +105,7 @@ async function loadModel() {
       log("WebGPU detection failed, falling back to wasm + q4:", e);
     }
 
-    const sizeLabel = dtype === "fp16" ? "~544MB fp16" : "~764MB Q4";
+    const sizeLabel = dtype === "fp16" ? "~700MB fp16" : "~250MB Q4";
     sendStatus({
       loaded: false,
       loading: true,
@@ -172,7 +172,33 @@ function parseToolCalls(
 ): { content: string | null; toolCalls: ToolCall[] | null; strategy: string } {
   const text = rawText.trim();
 
-  // ── Strategy 1: FunctionGemma special-token format ──
+  // ── Strategy 1: LFM2 format ──
+  // Format: [func_name(key1="val1", key2=val2)]
+  // We handle multiple calls if present: [f1(a=b)][f2(c=d)]
+  const lfm2Regex = /\[(\w+)\(([\s\S]*?)\)\]/g;
+  const toolCalls: ToolCall[] = [];
+  let lastIndex = 0;
+  let contentParts: string[] = [];
+  let m;
+
+  while ((m = lfm2Regex.exec(text)) !== null) {
+    if (m.index > lastIndex) {
+      contentParts.push(text.slice(lastIndex, m.index));
+    }
+    toolCalls.push(makeToolCall(m[1], parseLFM2Params(m[2])));
+    lastIndex = lfm2Regex.lastIndex;
+  }
+  contentParts.push(text.slice(lastIndex));
+
+  if (toolCalls.length > 0) {
+    return {
+      content: contentParts.join("").trim() || null,
+      toolCalls,
+      strategy: "LFM2",
+    };
+  }
+
+  // ── Strategy 2: FunctionGemma special-token format ──
   const fgMatch = text.match(
     /<start_function_call>\s*call:(\w+)\{([\s\S]*?)\}\s*<end_function_call>/,
   );
@@ -187,20 +213,7 @@ function parseToolCalls(
     };
   }
 
-  // ── Strategy 2: FunctionGemma without special tokens ──
-  const fgPlainMatch = text.match(/call:(\w+)\{([\s\S]*?)\}/);
-  if (fgPlainMatch) {
-    const name = fgPlainMatch[1];
-    const rawParams = fgPlainMatch[2];
-    const args = parseFGParams(rawParams);
-    return {
-      content: null,
-      toolCalls: [makeToolCall(name, args)],
-      strategy: "FG-plain",
-    };
-  }
-
-  // ── Strategy 3: Direct JSON {"name": ..., "arguments": ...} ──
+  // ── Strategy 3: JSON direct etc. (fallback for robustness) ──
   try {
     const parsed = JSON.parse(text);
     if (parsed.name && parsed.arguments !== undefined) {
@@ -210,18 +223,9 @@ function parseToolCalls(
         strategy: "JSON-direct",
       };
     }
-    if (parsed.tool_call?.name) {
-      return {
-        content: null,
-        toolCalls: [
-          makeToolCall(parsed.tool_call.name, parsed.tool_call.arguments),
-        ],
-        strategy: "JSON-tool_call",
-      };
-    }
   } catch (_) {}
 
-  // ── Strategy 4: JSON inside code block ──
+  // ... (keep other fallback strategies)
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
   if (codeBlockMatch) {
     try {
@@ -233,64 +237,31 @@ function parseToolCalls(
           strategy: "JSON-codeblock",
         };
       }
-      if (parsed.tool_call?.name) {
-        return {
-          content: null,
-          toolCalls: [
-            makeToolCall(parsed.tool_call.name, parsed.tool_call.arguments),
-          ],
-          strategy: "JSON-codeblock-tool_call",
-        };
-      }
     } catch (_) {}
-  }
-
-  // ── Strategy 5: JSON with "name" + "arguments" anywhere ──
-  const jsonMatch = text.match(
-    /\{[^{}]*"name"\s*:\s*"[^"]+?"[^{}]*"arguments"\s*:\s*\{[^}]*\}[^{}]*\}/,
-  );
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.name) {
-        return {
-          content: null,
-          toolCalls: [makeToolCall(parsed.name, parsed.arguments)],
-          strategy: "JSON-embedded",
-        };
-      }
-    } catch (_) {}
-  }
-
-  // ── Strategy 6: Any JSON with "name" ──
-  const anyJsonMatch = text.match(/\{[\s\S]*?"name"\s*:\s*"([^"]+)"[\s\S]*?\}/);
-  if (anyJsonMatch) {
-    try {
-      const parsed = JSON.parse(anyJsonMatch[0]);
-      if (parsed.name) {
-        return {
-          content: null,
-          toolCalls: [makeToolCall(parsed.name, parsed.arguments || {})],
-          strategy: "JSON-any-name",
-        };
-      }
-    } catch (_) {}
-  }
-
-  // ── Strategy 7: Tool name in plain text ──
-  if (tools && tools.length > 0) {
-    for (const t of tools) {
-      if (text.toLowerCase().includes(t.function.name.toLowerCase())) {
-        return {
-          content: null,
-          toolCalls: [makeToolCall(t.function.name, {})],
-          strategy: "text-match",
-        };
-      }
-    }
   }
 
   return { content: text, toolCalls: null, strategy: "none" };
+}
+
+/** Parse LFM2's key="value" or key=value parameter format */
+function parseLFM2Params(rawParams: string): Record<string, any> {
+  const args: Record<string, any> = {};
+  // Regular expression to match key="value", key='value', or key=value
+  const regex = /(\w+)\s*=\s*(?:"([^"]*?)"|'([^']*?)'|([^,)]+))/g;
+  let m;
+  while ((m = regex.exec(rawParams)) !== null) {
+    const key = m[1];
+    let val: any = (m[2] ?? m[3] ?? m[4] ?? "").trim();
+
+    // Basic type conversion for numbers, booleans, and null
+    if (val === "true") val = true;
+    else if (val === "false") val = false;
+    else if (val === "null") val = null;
+    else if (!isNaN(Number(val)) && val !== "") val = Number(val);
+
+    args[key] = val;
+  }
+  return args;
 }
 
 /** Parse FunctionGemma's key:<escape>value<escape> parameter format */
@@ -491,32 +462,42 @@ async function handleChatCompletion(request: OpenAIChatRequest): Promise<any> {
   }
 
   // ── Preprocess messages ──
+  // LFM2 supports standard tool calling structures in its template.
   const processedMessages = messages.map((msg) => {
-    if (msg.role === "system") {
-      return { role: "developer" as const, content: msg.content || "" };
-    }
+    // Convert tool results to the format expected by the model's template.
     if (msg.role === "tool") {
+      // For LFM2, we can try to pass the tool role directly if the template supports it.
+      // Otherwise, the template might expect the tool response between special tokens.
       return {
-        role: "user" as const,
-        content: `[Tool Result for ${msg.tool_call_id || "unknown"}]: ${msg.content}`,
+        role: "tool" as const,
+        tool_call_id: msg.tool_call_id,
+        content:
+          typeof msg.content === "string"
+            ? msg.content
+            : JSON.stringify(msg.content || ""),
       };
     }
-    if (msg.role === "assistant" && msg.tool_calls) {
-      const callDesc = msg.tool_calls
-        .map(
-          (tc) => `Called tool: ${tc.function.name}(${tc.function.arguments})`,
-        )
-        .join("\n");
-      return { role: "assistant" as const, content: callDesc };
+
+    // Convert system to system (not developer) for broader compatibility with older templates
+    if (msg.role === "system") {
+      return { role: "system" as const, content: msg.content || "" };
     }
-    return msg;
+
+    return {
+      ...msg,
+      content:
+        typeof msg.content === "string"
+          ? msg.content
+          : JSON.stringify(msg.content || ""),
+    };
   });
 
-  if (!processedMessages.find((m) => m.role === "developer")) {
+  // Ensure a system message exists if none provided
+  if (!processedMessages.find((m) => m.role === "system")) {
     processedMessages.unshift({
-      role: "developer" as const,
+      role: "system" as const,
       content:
-        "You are a model that can do function calling with the following functions",
+        "You are a helpful assistant with access to tools. Use the appropriate tools when needed.",
     });
   }
 
@@ -609,7 +590,7 @@ async function handleChatCompletion(request: OpenAIChatRequest): Promise<any> {
     id: `chatcmpl-${Date.now()}`,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
-    model: "functiongemma-270m-it-local",
+    model: "lfm2-350m-it-local",
     choices: [
       {
         index: 0,

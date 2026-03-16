@@ -16,7 +16,7 @@ async function ensureOffscreen(): Promise<void> {
     url: "offscreen/offscreen.html",
     reasons: [chrome.offscreen.Reason.WORKERS],
     justification:
-      "Running functiongemma-270m-it-ONNX LLM via Transformers.js with WebGPU",
+      "Running LFM2-350M-ONNX LLM via Transformers.js with WebGPU",
   });
 
   offscreenCreated = true;
