@@ -75,37 +75,21 @@ async function loadModel() {
     log("Tokenizer loaded. Detecting WebGPU fp16 support...");
 
     // ── Choose dtype + device ──
-    // q4f16 causes "createBuffer size out of range" on some GPUs.
-    // fp16 is safest for WebGPU; fall back to wasm + q4 if no WebGPU/fp16.
-    let dtype: any = "q4";
-    let device: any = "wasm";
+    // Strictly use q4f16 as requested
+    const dtype: any = "q4f16";
+    let device: any = "webgpu";
 
     try {
-      const adapter = await (navigator as any).gpu?.requestAdapter();
-      if (adapter) {
-        const hasFp16 = adapter.features.has("shader-f16");
-        log(`WebGPU adapter found. shader-f16: ${hasFp16}`);
-        if (hasFp16) {
-          dtype = "fp16";
-          device = "webgpu";
-        } else {
-          // No fp16 shader support — use q4 on WASM
-          dtype = "q4";
-          device = "wasm";
-          log("No fp16 shader support, falling back to wasm + q4");
-        }
-      } else {
-        dtype = "q4";
+      if (!(navigator as any).gpu) {
         device = "wasm";
-        log("No WebGPU adapter, falling back to wasm + q4");
+        log("No WebGPU support, falling back to wasm");
       }
     } catch (e) {
-      dtype = "q4";
       device = "wasm";
-      log("WebGPU detection failed, falling back to wasm + q4:", e);
+      log("WebGPU detection failed, falling back to wasm:", e);
     }
 
-    const sizeLabel = dtype === "fp16" ? "~700MB fp16" : "~250MB Q4";
+    const sizeLabel = "~350MB q4f16";
     sendStatus({
       loaded: false,
       loading: true,
@@ -246,18 +230,91 @@ function parseToolCalls(
 /** Parse LFM2's key="value" or key=value parameter format */
 function parseLFM2Params(rawParams: string): Record<string, any> {
   const args: Record<string, any> = {};
-  // Regular expression to match key="value", key='value', or key=value
-  const regex = /(\w+)\s*=\s*(?:"([^"]*?)"|'([^']*?)'|([^,)]+))/g;
-  let m;
-  while ((m = regex.exec(rawParams)) !== null) {
-    const key = m[1];
-    let val: any = (m[2] ?? m[3] ?? m[4] ?? "").trim();
+  let pos = 0;
+  while (pos < rawParams.length) {
+    while (pos < rawParams.length && /[\s,]/.test(rawParams[pos])) pos++;
+    if (pos >= rawParams.length) break;
 
-    // Basic type conversion for numbers, booleans, and null
+    const eqIdx = rawParams.indexOf("=", pos);
+    if (eqIdx === -1) break;
+    const key = rawParams.substring(pos, eqIdx).trim();
+    pos = eqIdx + 1;
+
+    while (pos < rawParams.length && /\s/.test(rawParams[pos])) pos++;
+    if (pos >= rawParams.length) break;
+
+    let valStr = "";
+    const firstChar = rawParams[pos];
+
+    if (firstChar === '"' || firstChar === "'") {
+      const quote = firstChar;
+      pos++;
+      let esc = false;
+      while (pos < rawParams.length) {
+        const c = rawParams[pos];
+        if (esc) {
+          valStr += c;
+          esc = false;
+        } else if (c === "\\") {
+          esc = true;
+        } else if (c === quote) {
+          pos++;
+          break;
+        } else {
+          valStr += c;
+        }
+        pos++;
+      }
+    } else if (firstChar === "{" || firstChar === "[") {
+      const endChar = firstChar === "{" ? "}" : "]";
+      let depth = 0;
+      let inQuote: string | null = null;
+      let esc = false;
+      const startPos = pos;
+      while (pos < rawParams.length) {
+        const c = rawParams[pos];
+        if (esc) {
+          esc = false;
+        } else if (c === "\\") {
+          esc = true;
+        } else if (inQuote) {
+          if (c === inQuote) inQuote = null;
+        } else if (c === '"' || c === "'") {
+          inQuote = c;
+        } else if (c === firstChar) {
+          depth++;
+        } else if (c === endChar) {
+          depth--;
+          if (depth === 0) {
+            pos++;
+            break;
+          }
+        }
+        pos++;
+      }
+      valStr = rawParams.substring(startPos, pos);
+    } else {
+      const endIdx = rawParams.slice(pos).search(/[,)]/);
+      if (endIdx === -1) {
+        valStr = rawParams.substring(pos);
+        pos = rawParams.length;
+      } else {
+        valStr = rawParams.substring(pos, pos + endIdx);
+        pos += endIdx;
+      }
+    }
+
+    valStr = valStr.trim();
+    let val: any = valStr;
     if (val === "true") val = true;
     else if (val === "false") val = false;
     else if (val === "null") val = null;
     else if (!isNaN(Number(val)) && val !== "") val = Number(val);
+    else if (valStr.startsWith("{") || valStr.startsWith("[")) {
+      try {
+        val = JSON.parse(valStr);
+      } catch {}
+    }
 
     args[key] = val;
   }
@@ -315,10 +372,11 @@ function buildFallbackToolCall(text: string, tools: OpenAITool[]): ToolCall {
   if (agentOutputTool) {
     return makeToolCall("AgentOutput", {
       action: {
-        type: "done",
-        text:
-          text.trim() ||
-          "I was unable to determine the next action. Please try rephrasing your command.",
+        done: {
+          text:
+            text.trim() ||
+            "I was unable to determine the next action. Please try rephrasing your command.",
+        },
       },
     });
   }
@@ -342,18 +400,25 @@ function sanitizeSchema(schema: any): any {
 
   const result: any = { ...schema };
 
+  // Handle anyOf / oneOf by merging them so the LLM template sees all properties
+  if (result.anyOf || result.oneOf) {
+    const variants = result.anyOf || result.oneOf;
+    result.type = "object";
+    result.properties = {};
+    for (const v of variants) {
+      if (v.type === "object" && v.properties) {
+        Object.assign(result.properties, v.properties);
+      } else if (v.properties) {
+        Object.assign(result.properties, v.properties);
+      }
+    }
+    delete result.anyOf;
+    delete result.oneOf;
+  }
+
   // Fix missing type
   if (result.type === undefined || result.type === null) {
-    if (result.anyOf || result.oneOf) {
-      const variants = result.anyOf || result.oneOf;
-      const nonNull = variants.find((v: any) => v.type && v.type !== "null");
-      result.type = nonNull?.type || "string";
-      if (nonNull?.properties) result.properties = nonNull.properties;
-      if (nonNull?.required) result.required = nonNull.required;
-      if (nonNull?.items) result.items = nonNull.items;
-      delete result.anyOf;
-      delete result.oneOf;
-    } else if (result.properties) {
+    if (result.properties) {
       result.type = "object";
     } else {
       result.type = "string";
@@ -413,82 +478,28 @@ async function handleChatCompletion(request: OpenAIChatRequest): Promise<any> {
     max_tokens = 1024,
   } = request;
 
-  // ════════════════════════════════════════════════════════════════
-  //  REQUEST LOG
-  // ════════════════════════════════════════════════════════════════
   logGroup(`═══ Request #${reqId} ═══`);
-
-  log("📥 INCOMING REQUEST from Page Agent:");
-  log("  tool_choice:", request.tool_choice);
-  log("  temperature:", temperature);
-  log("  max_tokens:", max_tokens);
-  log("  messages count:", messages.length);
-
-  // Log each message
-  messages.forEach((msg, i) => {
-    const preview =
-      typeof msg.content === "string"
-        ? msg.content.slice(0, 200) + (msg.content.length > 200 ? "..." : "")
-        : JSON.stringify(msg.content)?.slice(0, 200);
-    log(
-      `  msg[${i}] role=${msg.role}${msg.tool_call_id ? ` tool_call_id=${msg.tool_call_id}` : ""}:`,
-    );
-    log(`    content: ${preview}`);
-    if (msg.tool_calls) {
-      msg.tool_calls.forEach((tc, j) => {
-        log(
-          `    tool_calls[${j}]: ${tc.function.name}(${tc.function.arguments.slice(0, 150)})`,
-        );
-      });
-    }
-  });
-
-  // Log raw tools from Page Agent
-  if (rawTools) {
-    log("  tools count:", rawTools.length);
-    rawTools.forEach((t, i) => {
-      log(
-        `  tool[${i}]: ${t.function.name} — ${t.function.description?.slice(0, 100)}`,
-      );
-    });
-  }
 
   // Sanitize tools
   const tools = rawTools ? sanitizeTools(rawTools) : undefined;
 
-  if (tools) {
-    log("🔧 SANITIZED TOOLS:");
-    log(JSON.stringify(tools, null, 2));
-  }
-
   // ── Preprocess messages ──
-  // LFM2 supports standard tool calling structures in its template.
   const processedMessages = messages.map((msg) => {
-    // Convert tool results to the format expected by the model's template.
     if (msg.role === "tool") {
-      // For LFM2, we can try to pass the tool role directly if the template supports it.
-      // Otherwise, the template might expect the tool response between special tokens.
       return {
         role: "tool" as const,
         tool_call_id: msg.tool_call_id,
-        content:
-          typeof msg.content === "string"
-            ? msg.content
-            : JSON.stringify(msg.content || ""),
+        content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content || ""),
       };
     }
 
-    // Convert system to system (not developer) for broader compatibility with older templates
     if (msg.role === "system") {
       return { role: "system" as const, content: msg.content || "" };
     }
 
     return {
       ...msg,
-      content:
-        typeof msg.content === "string"
-          ? msg.content
-          : JSON.stringify(msg.content || ""),
+      content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content || ""),
     };
   });
 
@@ -496,8 +507,7 @@ async function handleChatCompletion(request: OpenAIChatRequest): Promise<any> {
   if (!processedMessages.find((m) => m.role === "system")) {
     processedMessages.unshift({
       role: "system" as const,
-      content:
-        "You are a helpful assistant with access to tools. Use the appropriate tools when needed.",
+      content: "You are a helpful assistant with access to tools. Use the appropriate tools when needed.",
     });
   }
 
@@ -506,13 +516,6 @@ async function handleChatCompletion(request: OpenAIChatRequest): Promise<any> {
     content: typeof m.content === "string" ? m.content : m.content || "",
   }));
 
-  log("📝 PROCESSED MESSAGES for tokenizer:");
-  chatMessages.forEach((m, i) => {
-    log(
-      `  [${i}] ${m.role}: ${m.content.slice(0, 200)}${m.content.length > 200 ? "..." : ""}`,
-    );
-  });
-
   // ── apply_chat_template ──
   const promptText = tokenizer.apply_chat_template(chatMessages, {
     tools: tools || [],
@@ -520,11 +523,7 @@ async function handleChatCompletion(request: OpenAIChatRequest): Promise<any> {
     tokenize: false,
   });
 
-  log("📜 FULL PROMPT (first 1000 chars):");
-  log(promptText.slice(0, 1000));
-  if (promptText.length > 1000) {
-    log(`  ... (${promptText.length} total chars)`);
-  }
+  log("📜 AGENT PROMPT:\n" + promptText);
 
   const inputs = tokenizer(promptText, {
     return_tensors: "pt",
@@ -557,23 +556,10 @@ async function handleChatCompletion(request: OpenAIChatRequest): Promise<any> {
 
   const genTime = ((performance.now() - genStart) / 1000).toFixed(2);
 
-  // ════════════════════════════════════════════════════════════════
-  //  MODEL OUTPUT LOG
-  // ════════════════════════════════════════════════════════════════
-  log(`🤖 RAW MODEL OUTPUT (${genTime}s):`);
-  log(generatedText);
+  log(`🤖 AI RESPONSE (${genTime}s):\n${generatedText}`);
 
   // ── Parse tool calls ──
   const parsed = parseToolCalls(generatedText, tools);
-
-  log(`🔍 PARSE RESULT: strategy=${parsed.strategy}`);
-  if (parsed.toolCalls) {
-    parsed.toolCalls.forEach((tc, i) => {
-      log(`  toolCall[${i}]: ${tc.function.name}(${tc.function.arguments})`);
-    });
-  } else {
-    log(`  content: ${parsed.content?.slice(0, 300)}`);
-  }
 
   // Fallback if tool_choice requires a tool call
   let usedFallback = false;
@@ -608,25 +594,6 @@ async function handleChatCompletion(request: OpenAIChatRequest): Promise<any> {
       total_tokens: (inputs.input_ids?.dims?.[1] || 0) + generatedText.length,
     },
   };
-
-  // ════════════════════════════════════════════════════════════════
-  //  RESPONSE LOG
-  // ════════════════════════════════════════════════════════════════
-  log("📤 RESPONSE to Page Agent:");
-  log("  finish_reason:", response.choices[0].finish_reason);
-  log("  strategy:", parsed.strategy + (usedFallback ? " → FALLBACK" : ""));
-  if (response.choices[0].message.tool_calls) {
-    response.choices[0].message.tool_calls.forEach((tc: any, i: number) => {
-      log(`  tool_calls[${i}]: ${tc.function.name}`);
-      log(`    arguments: ${tc.function.arguments}`);
-    });
-  } else {
-    log(`  content: ${response.choices[0].message.content?.slice(0, 300)}`);
-  }
-  log(
-    `  tokens: prompt=${response.usage.prompt_tokens}, completion=${response.usage.completion_tokens}`,
-  );
-  log(`  generation time: ${genTime}s`);
 
   logGroupEnd(); // End request group
 
